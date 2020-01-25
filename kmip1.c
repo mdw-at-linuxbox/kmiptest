@@ -15,6 +15,7 @@ char *clientcert = 0, *clientkey = 0;
 char *portstring;
 char *username;
 char *password;
+char *name;
 
 char *my_decode_error_string(int i)
 {
@@ -183,13 +184,15 @@ int process()
 
 	// build the request message
 
-	Attribute a[3], *ap;
+	Attribute a[8], *ap;
 	memset(a, 0, sizeof *a);
 	for (i = 0; i < sizeof a/sizeof *a; ++i)
 		kmip_init_attribute(a+i);
 	enum cryptographic_algorithm alg = KMIP_CRYPTOALG_AES;
 	int32 length = 256;
 	int32 mask = KMIP_CRYPTOMASK_ENCRYPT | KMIP_CRYPTOMASK_DECRYPT;
+	TextString nvalue[1];
+	Name nattr[1];
 
 	ap = a;
 	ap->type = KMIP_ATTR_CRYPTOGRAPHIC_ALGORITHM;
@@ -201,6 +204,17 @@ int process()
 	ap->type = KMIP_ATTR_CRYPTOGRAPHIC_USAGE_MASK;
 	ap->value = &mask;
 	++ap;
+	if (name) {
+		memset(nvalue, 0, sizeof *nvalue);
+		nvalue->value = name;
+		nvalue->size = strlen(name);
+		memset(nattr, 0, sizeof *nattr);
+		nattr->value = nvalue;
+		nattr->type = KMIP_NAME_UNINTERPRETED_TEXT_STRING;
+		ap->type = KMIP_ATTR_NAME;
+		ap->value = nattr;
+		++ap;
+	}
 
 	TemplateAttribute ta[1];
 	memset(ta, 0, sizeof *ta);
@@ -426,13 +440,21 @@ int main(int ac, char **av)
 		--ac;
 		password = *++av;
 		break;
+	case 'n':
+		if (ac < 1) {
+			msg = "-P: missing name";
+			goto Usage;
+		}
+		--ac;
+		name = *++av;
+		break;
 	case 'V':
 		++Vflag;
 		break;
 	default:
 	Usage:
 		if (msg) fprintf(stderr,"Error: %s\n", msg);
-		fprintf(stderr,"Usage: kmip1 [-U user] [-P pw] [-C cacert] [-c cert] [-k key] -p portno -h host\n");
+		fprintf(stderr,"Usage: kmip1 [-U user] [-P pw] [-C cacert] [-c cert] [-k key] [-n name] -p portno -h host\n");
 		exit(1);
 	} else {
 		msg = "extra arg?";
