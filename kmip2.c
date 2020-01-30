@@ -24,19 +24,6 @@ enum kmip_version protocol_version = KMIP_1_0;
 #define OP_LOCATE 2
 #define OP_GET 3
 
-#if 0
-// should be part of "enum operation" //
-// KMIP 1.4 9.1.3.2.27 operation enumeration
-#define KMIP_OP_LOCATE 8
-typedef struct locate_request_payload {
-	int max_items;
-	int offset_items;
-	int storage_status_mask;
-	enum object_group_member object_group_member;
-	TemplateAttribute *attribute;
-} LocateRequestPayload;
-#endif
-
 char *my_object_type_string(enum object_type value)
 {
 	switch(value) {
@@ -370,11 +357,6 @@ int process(int op)
 		uvalue->size = strlen(unique_id);
 	}
 
-	TemplateAttribute ta[1];
-	memset(ta, 0, sizeof *ta);
-	ta->attributes = a;
-	ta->attribute_count = ap - a;
-
 	ProtocolVersion pv[1];
 	memset(pv, 0, sizeof *pv);
 	kmip_init_protocol_version(pv, kconn->kmip_ctx->version);
@@ -388,12 +370,18 @@ int process(int op)
 	rh->batch_count = 1;
 
 	CreateRequestPayload create_req[1];
+	LocateRequestPayload locate_req[1];
 	GetRequestPayload get_req[1];
 	RequestBatchItem rbi[1];
+	TemplateAttribute ta[1];
 	memset(rbi, 0, sizeof *rbi);
 	kmip_init_request_batch_item(rbi);
 	switch (op) {
 	case OP_CREATE:
+		memset(ta, 0, sizeof *ta);
+		ta->attributes = a;
+		ta->attribute_count = ap - a;
+
 		memset(create_req, 0, sizeof *create_req);
 		create_req->object_type = KMIP_OBJTYPE_SYMMETRIC_KEY;
 		create_req->template_attribute = ta;
@@ -411,11 +399,15 @@ int process(int op)
 		rbi->operation = KMIP_OP_GET;
 		rbi->request_payload = get_req;
 		break;
-#if 0
 	case OP_LOCATE:
+		memset(locate_req, 0, sizeof *locate_req);
+		if (ap > a) {
+			locate_req->attributes = a;
+			locate_req->attribute_count = ap - a;
+		}
 		rbi->operation = KMIP_OP_LOCATE;
 		rbi->request_payload = locate_req;
-#endif
+		break;
 	default:
 		fprintf(stderr,"oops, missing operation request implementation\n");
 		r = 1;
@@ -463,7 +455,7 @@ printf ("Adding credential\n");
 		fprintf(stderr,")\n");
 		fprintf(stderr,"Context error: %s\n",
 			kconn->kmip_ctx->error_message);
-		fprintf(stderr,"Stack trace: %s\n");
+		fprintf(stderr,"Stack trace:\n");
 		my_fprint_stacked_errors(stderr, kconn->kmip_ctx);
 		r = 1;
 		goto Done;
@@ -526,6 +518,20 @@ printf ("Adding credential\n");
 			if (pld->unique_identifier) {
 				printf ("%.*s", (int)pld->unique_identifier->size,
 					pld->unique_identifier->value);
+			}
+			printf ("\n");
+		}
+		} break;
+	case OP_LOCATE: {
+		LocateResponsePayload *pld = (LocateResponsePayload *)req->response_payload;
+		if (pld) {
+			char *sep = "";
+			if (Vflag) printf ("located items %d\n", pld->located_items);
+			if (Vflag) printf ("Unique Identifiers: %d\n",
+				pld->unique_identifiers_count);
+			for (i = 0; i < pld->unique_identifiers_count; ++i) {
+				printf ("%s%s", sep, pld->unique_identifiers[i]);
+				sep = " ";
 			}
 			printf ("\n");
 		}
