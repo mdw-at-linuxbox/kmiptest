@@ -23,6 +23,8 @@ enum kmip_version protocol_version = KMIP_1_0;
 #define OP_CREATE 1
 #define OP_LOCATE 2
 #define OP_GET 3
+#define OP_LISTATTRS 4
+#define OP_GETATTRS 5
 
 char *my_object_type_string(enum object_type value)
 {
@@ -149,6 +151,160 @@ char *my_cryptographic_algorithm_string(enum cryptographic_algorithm i)
 	}
 }
 
+char *my_attribute_type_string(enum attribute_type value)
+{
+	switch(value) {
+	case KMIP_ATTR_UNIQUE_IDENTIFIER:	return "Unique Identifier";
+	case KMIP_ATTR_NAME:	return"Name";
+	case KMIP_ATTR_OBJECT_TYPE:	return"Object Type";
+	case KMIP_ATTR_CRYPTOGRAPHIC_ALGORITHM:	return"Cryptographic Algorithm";
+	case KMIP_ATTR_CRYPTOGRAPHIC_LENGTH:	return"Cryptographic Length";
+	case KMIP_ATTR_OPERATION_POLICY_NAME:	return"Operation Policy Name";
+	case KMIP_ATTR_CRYPTOGRAPHIC_USAGE_MASK:	return"Cryptographic Usage Mask";
+	case KMIP_ATTR_STATE:	return"State";
+	default:
+		return "?";
+	}
+}
+char *my_cryptographic_usage_mask_string(char *s, int n, int32 v)
+{
+	int kl;
+	char *r = s;
+	char *sep = "";
+	for (sep = ""; (v) && kl>1; sep = ",") {
+		if ((v&KMIP_CRYPTOMASK_SIGN)) {
+			snprintf(s, n, "%ssign", sep);
+			v &= ~KMIP_CRYPTOMASK_SIGN;
+		} else if ((v&KMIP_CRYPTOMASK_VERIFY)) {
+			snprintf(s, n, "%sverify", sep);
+			v &= ~KMIP_CRYPTOMASK_VERIFY;
+		} else if ((v&KMIP_CRYPTOMASK_ENCRYPT)) {
+			snprintf(s, n, "%sencrypt", sep);
+			v &= ~KMIP_CRYPTOMASK_ENCRYPT;
+		} else if ((v&KMIP_CRYPTOMASK_DECRYPT)) {
+			snprintf(s, n, "%sdecrypt", sep);
+			v &= ~KMIP_CRYPTOMASK_DECRYPT;
+		} else if ((v&KMIP_CRYPTOMASK_WRAP_KEY)) {
+			snprintf(s, n, "%swrap_key", sep);
+			v &= ~KMIP_CRYPTOMASK_WRAP_KEY;
+		} else if ((v&KMIP_CRYPTOMASK_UNWRAP_KEY)) {
+			snprintf(s, n, "%sunwrap_key", sep);
+			v &= ~KMIP_CRYPTOMASK_UNWRAP_KEY;
+		} else if ((v&KMIP_CRYPTOMASK_EXPORT)) {
+			snprintf(s, n, "%sexport", sep);
+			v &= ~KMIP_CRYPTOMASK_EXPORT;
+		} else if ((v&KMIP_CRYPTOMASK_MAC_GENERATE)) {
+			snprintf(s, n, "%smac_generate", sep);
+			v &= ~KMIP_CRYPTOMASK_MAC_GENERATE;
+		} else if ((v&KMIP_CRYPTOMASK_MAC_VERIFY)) {
+			snprintf(s, n, "%smac_verify", sep);
+			v &= ~KMIP_CRYPTOMASK_MAC_VERIFY;
+		} else if ((v&KMIP_CRYPTOMASK_DERIVE_KEY)) {
+			snprintf(s, n, "%sderive_key", sep);
+			v &= ~KMIP_CRYPTOMASK_DERIVE_KEY;
+		} else if ((v&KMIP_CRYPTOMASK_CONTENT_COMMITMENT)) {
+			snprintf(s, n, "%scontent_commitment", sep);
+			v &= ~KMIP_CRYPTOMASK_CONTENT_COMMITMENT;
+		} else if ((v&KMIP_CRYPTOMASK_KEY_AGREEMENT)) {
+			snprintf(s, n, "%skey_agreement", sep);
+			v &= ~KMIP_CRYPTOMASK_KEY_AGREEMENT;
+		} else if ((v&KMIP_CRYPTOMASK_CERTIFICATE_SIGN)) {
+			snprintf(s, n, "%scertificate_sign", sep);
+			v &= ~KMIP_CRYPTOMASK_CERTIFICATE_SIGN;
+		} else if ((v&KMIP_CRYPTOMASK_CRL_SIGN)) {
+			snprintf(s, n, "%scrl_sign", sep);
+			v &= ~KMIP_CRYPTOMASK_CRL_SIGN;
+		} else if ((v&KMIP_CRYPTOMASK_GENERATE_CRYPTOGRAM)) {
+			snprintf(s, n, "%sgenerate_cryptogram", sep);
+			v &= ~KMIP_CRYPTOMASK_GENERATE_CRYPTOGRAM;
+		} else if ((v&KMIP_CRYPTOMASK_VALIDATE_CRYPTOGRAM)) {
+			snprintf(s, n, "%svalidate_cryptogram", sep);
+			v &= ~KMIP_CRYPTOMASK_VALIDATE_CRYPTOGRAM;
+		} else if ((v&KMIP_CRYPTOMASK_TRANSLATE_ENCRYPT)) {
+			snprintf(s, n, "%stranslate_encrypt", sep);
+			v &= ~KMIP_CRYPTOMASK_TRANSLATE_ENCRYPT;
+		} else if ((v&KMIP_CRYPTOMASK_TRANSLATE_DECRYPT)) {
+			snprintf(s, n, "%stranslate_decrypt", sep);
+			v &= ~KMIP_CRYPTOMASK_TRANSLATE_DECRYPT;
+		} else if ((v&KMIP_CRYPTOMASK_TRANSLATE_WRAP)) {
+			snprintf(s, n, "%stranslate_wrap", sep);
+			v &= ~KMIP_CRYPTOMASK_TRANSLATE_WRAP;
+		} else if ((v&KMIP_CRYPTOMASK_TRANSLATE_UNWRAP)) {
+			snprintf(s, n, "%stranslate_unwrap", sep);
+			v &= ~KMIP_CRYPTOMASK_TRANSLATE_UNWRAP;
+		} else if ((v&KMIP_CRYPTOMASK_AUTHENTICATE)) {
+			snprintf(s, n, "%sauthenticate", sep);
+			v &= ~KMIP_CRYPTOMASK_AUTHENTICATE;
+		} else if ((v&KMIP_CRYPTOMASK_UNRESTRICTED)) {
+			snprintf(s, n, "%sunrestricted", sep);
+			v &= ~KMIP_CRYPTOMASK_UNRESTRICTED;
+		} else if ((v&KMIP_CRYPTOMASK_FPE_ENCRYPT)) {
+			snprintf(s, n, "%sfpe_encrypt", sep);
+			v &= ~KMIP_CRYPTOMASK_FPE_ENCRYPT;
+		} else if ((v&KMIP_CRYPTOMASK_FPE_DECRYPT)) {
+			snprintf(s, n, "%sfpe_decrypt", sep);
+			v &= ~KMIP_CRYPTOMASK_FPE_DECRYPT;
+		} else {
+			snprintf(s, n, "%s%#x", (*sep ? "+" : ""), v);
+			v = 0;
+		}
+		kl = strlen(s);
+		s += kl;
+		n -= kl;
+	}
+	return r;
+}
+
+char *my_attribute_value_string(char *s, int n, enum attribute_type type, void *value)
+{
+	char *t;
+	switch(type) {
+	case KMIP_ATTR_UNIQUE_IDENTIFIER:
+		snprintf(s, n, "%.*s",
+			(int)((TextString*)value)->size,
+			((TextString*)value)->value);
+		break;
+	case KMIP_ATTR_NAME:
+		switch(((Name*)value)->type) {
+		case KMIP_NAME_UNINTERPRETED_TEXT_STRING:
+			t = "s";
+			break;
+		case KMIP_NAME_URI:
+			t = "uri";
+			break;
+		default:
+			t = "?";
+		}
+		snprintf(s, n, "(%s)%.*s",
+			t,
+			(int)((Name*)value)->value->size,
+			((Name*)value)->value->value);
+		break;
+	case KMIP_ATTR_OBJECT_TYPE:
+		snprintf(s, n, my_object_type_string(*(enum object_type*)value));
+		break;
+	case KMIP_ATTR_CRYPTOGRAPHIC_ALGORITHM:
+		snprintf(s, n, my_cryptographic_algorithm_string(*(enum cryptographic_algorithm*)value));
+		break;
+	case KMIP_ATTR_CRYPTOGRAPHIC_LENGTH:
+		snprintf(s, n, "%d", *(int32 *)value);
+		break;
+	case KMIP_ATTR_OPERATION_POLICY_NAME:
+		snprintf(s, n, "%.*s",
+			(int)((TextString*)value)->size,
+			((TextString*)value)->value);
+		break;
+	case KMIP_ATTR_CRYPTOGRAPHIC_USAGE_MASK:
+		s = my_cryptographic_usage_mask_string(s, n, *(int32*)value);
+		break;
+	case KMIP_ATTR_STATE:
+	default:
+		snprintf(s, n, "?");
+		break;
+	}
+	return s;
+}
+
 char *my_decode_error_string(int i)
 {
 	switch(i) {
@@ -195,7 +351,7 @@ my_fprint_stacked_errors(FILE *out, KMIP *ctx)
 	for (ef = ctx->frame_index; ef >= ctx->errors; --ef)
 		if (!ef->line)
 			;
-		else fprintf(out, "%- %s @ line: %d\n",
+		else fprintf(out, "- %s @ line: %d\n",
 			ef->function, ef->line);
 }
 
@@ -223,6 +379,8 @@ int process(int op)
 	char *response = NULL;
 	int response_size = 0;
 	TextString *up;
+
+	char *what = "unknown";
 
 	// generic initialization
 
@@ -372,6 +530,8 @@ int process(int op)
 	CreateRequestPayload create_req[1];
 	LocateRequestPayload locate_req[1];
 	GetRequestPayload get_req[1];
+	GetAttributeListRequestPayload lsattrs_req[1];
+	GetAttributesRequestPayload getattrs_req[1];
 	RequestBatchItem rbi[1];
 	TemplateAttribute ta[1];
 	memset(rbi, 0, sizeof *rbi);
@@ -388,6 +548,7 @@ int process(int op)
 
 		rbi->operation = KMIP_OP_CREATE;
 		rbi->request_payload = create_req;
+		what = "create";
 		break;
 	case OP_GET:
 		memset(get_req, 0, sizeof *get_req);
@@ -398,6 +559,7 @@ int process(int op)
 
 		rbi->operation = KMIP_OP_GET;
 		rbi->request_payload = get_req;
+		what = "get";
 		break;
 	case OP_LOCATE:
 		memset(locate_req, 0, sizeof *locate_req);
@@ -407,6 +569,23 @@ int process(int op)
 		}
 		rbi->operation = KMIP_OP_LOCATE;
 		rbi->request_payload = locate_req;
+		what = "locate";
+		break;
+	case OP_LISTATTRS:
+		memset(lsattrs_req, 0, sizeof *lsattrs_req);
+		if (unique_id)
+			lsattrs_req->unique_identifier = uvalue;;
+		rbi->operation = KMIP_OP_GET_ATTRIBUTE_LIST;
+		rbi->request_payload = lsattrs_req;
+		what = "get attribute list";
+		break;
+	case OP_GETATTRS:
+		memset(getattrs_req, 0, sizeof *getattrs_req);
+		if (unique_id)
+			getattrs_req->unique_identifier = uvalue;;
+		rbi->operation = KMIP_OP_GET_ATTRIBUTES;
+		rbi->request_payload = getattrs_req;
+		what = "get attributes";
 		break;
 	default:
 		fprintf(stderr,"oops, missing operation request implementation\n");
@@ -476,7 +655,7 @@ printf ("Adding credential\n");
 		fprintf(stderr,")\n");
 		fprintf(stderr,"Context error: %s\n",
 			kconn->kmip_ctx->error_message);
-		fprintf(stderr,"Stack trace: %s\n");
+		fprintf(stderr,"Stack trace\n");
 		my_fprint_stacked_errors(stderr, kconn->kmip_ctx);
 		r = 1;
 		goto Done;
@@ -491,12 +670,12 @@ printf ("Adding credential\n");
 	need_to_free_response = 1;
 	i = kmip_decode_response_message(kconn->kmip_ctx, resp_m);
 	if (i != KMIP_OK) {
-		fprintf (stderr,"Failed to decode create response %d (", i);
+		fprintf (stderr,"Failed to decode %s response %d (", what, i);
 		fprintf(stderr,"%s", my_decode_error_string(i));
 		fprintf (stderr, ")\n");
 		fprintf(stderr,"Context error: %s\n",
 			kconn->kmip_ctx->error_message);
-		fprintf(stderr,"Stack trace: %s\n");
+		fprintf(stderr,"Stack trace\n");
 		my_fprint_stacked_errors(stderr, kconn->kmip_ctx);
 		r = 1;
 		goto Done;
@@ -600,6 +779,40 @@ default:
 }
 		}
 		} break;
+	case OP_LISTATTRS: {
+		GetAttributeListResponsePayload *pld = (GetAttributeListResponsePayload *)req->response_payload;
+		if (pld) {
+			char *sep = "";
+			if (Vflag) printf ("Attribute names: %d\n",
+				pld->attribute_names_count);
+			for (i = 0; i < pld->attribute_names_count; ++i) {
+				printf ("%s%s", sep,
+					my_attribute_type_string(pld->attribute_names[i]));
+				sep = ", ";
+			}
+			printf ("\n");
+		}
+		} break;
+	case OP_GETATTRS: {
+		GetAttributesResponsePayload *pld = (GetAttributesResponsePayload *)req->response_payload;
+		if (pld) {
+			char *sep = "";
+			if (Vflag) printf ("Attributes: %d\n",
+				pld->attribute_count);
+			for (i = 0; i < pld->attribute_count; ++i) {
+				char vtemp[512];
+				my_attribute_value_string(vtemp, sizeof vtemp,
+					pld->attributes[i].type,
+					pld->attributes[i].value);
+				printf ("%s%s=%s",
+					sep,
+					my_attribute_type_string(pld->attributes[i].type),
+					vtemp);
+				sep = ", ";
+			}
+			printf ("\n");
+		}
+		} break;
 	default:
 		fprintf(stderr,"oops, missing operation response implementation\n");
 	}
@@ -662,6 +875,8 @@ char *optable[] = {
 	"create",
 	"locate",
 	"get",
+	"lsattr",
+	"getattr",
 0};
 
 int main(int ac, char **av)
@@ -764,7 +979,7 @@ int main(int ac, char **av)
 	default:
 	Usage:
 		if (msg) fprintf(stderr,"Error: %s\n", msg);
-		fprintf(stderr,"Usage: kmip2 op [-U user] [-P pw] [-C cacert] [-c cert] [-k key] [-n name] -p portno -h host\n\top: create|locate|get\n");
+		fprintf(stderr,"Usage: kmip2 op [-U user] [-P pw] [-C cacert] [-c cert] [-k key] [-n name] -p portno -h host\n\top: create|locate|get|lsattr|getattr\n");
 		exit(1);
 	} else {
 		if (op) {
@@ -784,6 +999,8 @@ int main(int ac, char **av)
 //	case 1:	// OP_CREATE
 //	case 2:	// OP_LOCATE
 //	case 3:	// OP_GET
+//	case 4:	// OP_LISTATTRS
+//	case 5:	// OP_GETATTRS
 	}
 	if (!host) {
 		msg = "Missing host";
