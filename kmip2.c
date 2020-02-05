@@ -162,6 +162,10 @@ char *my_attribute_type_string(enum attribute_type value)
 	case KMIP_ATTR_OPERATION_POLICY_NAME:	return"Operation Policy Name";
 	case KMIP_ATTR_CRYPTOGRAPHIC_USAGE_MASK:	return"Cryptographic Usage Mask";
 	case KMIP_ATTR_STATE:	return"State";
+	case KMIP_ATTR_DIGEST:	return "Digest";
+	case KMIP_ATTR_LAST_CHANGE_DATE:	return "Last Change Date";
+	case KMIP_ATTR_INITIAL_DATE:	return "Initial Date";
+	case KMIP_ATTR_LEASE_TIME:	return "Lease Time";
 	default:
 		return "?";
 	}
