@@ -25,6 +25,7 @@ enum kmip_version protocol_version = KMIP_1_0;
 #define OP_GET 3
 #define OP_LISTATTRS 4
 #define OP_GETATTRS 5
+#define OP_DESTROY 6
 
 char *my_object_type_string(enum object_type value)
 {
@@ -536,6 +537,7 @@ int process(int op)
 	GetRequestPayload get_req[1];
 	GetAttributeListRequestPayload lsattrs_req[1];
 	GetAttributesRequestPayload getattrs_req[1];
+	DestroyRequestPayload destroy_req[1];
 	RequestBatchItem rbi[1];
 	TemplateAttribute ta[1];
 	memset(rbi, 0, sizeof *rbi);
@@ -590,6 +592,14 @@ int process(int op)
 		rbi->operation = KMIP_OP_GET_ATTRIBUTES;
 		rbi->request_payload = getattrs_req;
 		what = "get attributes";
+		break;
+	case OP_DESTROY:
+		memset(destroy_req, 0, sizeof *destroy_req);
+		if (unique_id)
+			destroy_req->unique_identifier = uvalue;;
+		rbi->operation = KMIP_OP_DESTROY;
+		rbi->request_payload = destroy_req;
+		what = "destroy";
 		break;
 	default:
 		fprintf(stderr,"oops, missing operation request implementation\n");
@@ -817,6 +827,17 @@ default:
 			printf ("\n");
 		}
 		} break;
+	case OP_DESTROY: {
+		DestroyResponsePayload *pld = (DestroyResponsePayload *)req->response_payload;
+		if (pld) {
+			if (Vflag) printf ("\nunique ID: ");
+			if (pld->unique_identifier) {
+				printf ("%.*s", (int)pld->unique_identifier->size,
+					pld->unique_identifier->value);
+			}
+			printf ("\n");
+		}
+		} break;
 	default:
 		fprintf(stderr,"oops, missing operation response implementation\n");
 	}
@@ -881,6 +902,7 @@ char *optable[] = {
 	"get",
 	"lsattr",
 	"getattr",
+	"destroy",
 0};
 
 int main(int ac, char **av)
@@ -1005,6 +1027,7 @@ int main(int ac, char **av)
 //	case 3:	// OP_GET
 //	case 4:	// OP_LISTATTRS
 //	case 5:	// OP_GETATTRS
+//	case 6:	// OP_DESTROY
 	}
 	if (!host) {
 		msg = "Missing host";
