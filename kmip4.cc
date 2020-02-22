@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include <iostream>
+#include <iomanip>
 #include <map>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -48,7 +49,7 @@ struct my_kmip_connection {
 
 static int
 kmip_write_an_error_helper(const char *s, size_t l, void *u) {
-	std::ostream *out = (std::ostream *)u;
+	std::ostream *out = static_cast<std::ostream *>(u);
 	std::string es(s, l);
 	*out << es << std::endl;
 	return l;
@@ -123,7 +124,7 @@ int process(int op)
 	BIO_set_conn_hostname(kconn->bio, host);
 	BIO_set_conn_port(kconn->bio, portstring);
 	if (BIO_do_connect(kconn->bio) != 1) {
-		std::cerr << "BIO_do_connect failed to " << host << " " << portstring << std::endl;
+		std::cerr << "BIO_do_connect failed to " << host << ' ' << portstring << std::endl;
 		ERR_put_errors(std::cerr);
 		r = 1;
 		goto Done;
@@ -310,8 +311,8 @@ int process(int op)
 	if (kconn->kmip_ctx->credential_list) {
 		LinkedListItem *item = kconn->kmip_ctx->credential_list->head;
 		if (item) {
-printf ("Adding credential\n");
-			auth->credential = (Credential *)item->data;
+std::cout << "Adding credential\n";
+			auth->credential = static_cast<Credential *>(item->data);
 			rh->authentication = auth;
 		}
 	}
@@ -326,7 +327,7 @@ printf ("Adding credential\n");
 		kconn->encoding = static_cast<uint8*>(kconn->kmip_ctx->calloc_func(kconn->kmip_ctx->state, kconn->buffer_blocks, kconn->buffer_block_size));
 		if (!kconn->encoding) {
 			std::cerr << "kmip buffer alloc failed: "
-				<< kconn->buffer_blocks << "*" << kconn->buffer_block_size << std::endl;
+				<< kconn->buffer_blocks << '*' << kconn->buffer_block_size << std::endl;
 			r = 1;
 			goto Done;
 		}
@@ -337,7 +338,7 @@ printf ("Adding credential\n");
 	if (i != KMIP_OK) {
 		std::cerr << "Can't encode create request: " << i << " ("
 			<< my_decode_error_string(i)
-			<< ")" << std::endl;
+			<< ')' << std::endl;
 		std::cerr << "Context error: " <<
 			kconn->kmip_ctx->error_message << std::endl;
 		std::cerr << "Stack trace:" << std::endl;
@@ -358,7 +359,7 @@ printf ("Adding credential\n");
 	if (i < 0) {
 		std::cerr << "Problem sending request to create symmetric key: " << i << " ("
 			<< my_decode_error_string(i)
-			<< ")" << std::endl;
+			<< ')' << std::endl;
 		std::cerr << "Context error: "
 			<< kconn->kmip_ctx->error_message << std::endl;
 		std::cerr << "Stack trace" << std::endl
@@ -375,7 +376,7 @@ printf ("Adding credential\n");
 	i = kmip_decode_response_message(kconn->kmip_ctx, resp_m);
 	if (i != KMIP_OK) {
 		std::cerr << "Failed to decode " << what << " response " << i << " ("
-			<< my_decode_error_string(i) << ")" << std::endl;
+			<< my_decode_error_string(i) << ')' << std::endl;
 		std::cerr << "Context error: "
 			<< kconn->kmip_ctx->error_message << std::endl;
 		std::cerr << "Stack trace" << std::endl
@@ -387,66 +388,70 @@ printf ("Adding credential\n");
 		kmip_print_response_message(resp_m);
 	ResponseBatchItem *req = resp_m->batch_items;
 	enum result_status rs = req->result_status;
-	printf ("result: %d (", rs);
-	fprintf(stdout,"%s", my_decode_result_status_enum(rs));
-	printf (")\n");
+	std::cout << "result: " << rs
+		<< " (" <<my_decode_result_status_enum(rs) << ')' << std::endl;
 	if (rs != KMIP_STATUS_SUCCESS)
 		;
 	switch(op) {
 	case OP_CREATE: {
-		CreateResponsePayload *pld = (CreateResponsePayload *)req->response_payload;
+		CreateResponsePayload *pld = static_cast<CreateResponsePayload *>(req->response_payload);
 		if (pld) {
-			if (Vflag) printf ("unique ID: ");
+			if (Vflag) std::cout << "unique ID: ";
 			if (pld->unique_identifier) {
-				printf ("%.*s", (int)pld->unique_identifier->size,
-					pld->unique_identifier->value);
+				std::cout << std::string(
+					pld->unique_identifier->value,
+					pld->unique_identifier->size);
 			}
-			printf ("\n");
+			std::cout << std::endl;
 		}
 		} break;
 	case OP_LOCATE: {
-		LocateResponsePayload *pld = (LocateResponsePayload *)req->response_payload;
+		LocateResponsePayload *pld = static_cast<LocateResponsePayload *>(req->response_payload);
 		if (pld) {
 			const char *sep = "";
-			if (Vflag) printf ("located items %d\n", pld->located_items);
-			if (Vflag) printf ("Unique Identifiers: %d\n",
-				pld->unique_identifiers_count);
+			if (Vflag) std::cout << "located items " << pld->located_items << std::endl;
+			if (Vflag) std::cout << "Unique Identifiers: "
+				<< pld->unique_identifiers_count << std::endl;
 			for (i = 0; i < pld->unique_identifiers_count; ++i) {
-				printf ("%s%s", sep, pld->unique_identifiers[i]);
+				std::cout << sep << std::string(pld->unique_identifiers[i].value,pld->unique_identifiers[i].size);
 				sep = " ";
 			}
-			printf ("\n");
+			std::cout << std::endl;
 		}
 		} break;
 	case OP_GET: {
-		GetResponsePayload *pld = (GetResponsePayload *)req->response_payload;
+		GetResponsePayload *pld = static_cast<GetResponsePayload *>(req->response_payload);
 		if (pld) {
-			if (Vflag) printf ("Object Type: ");
-			printf ("%s", my_object_type_string(pld->object_type));
-			if (Vflag) printf ("\nunique ID: ");
-			else printf ("\t");
+			if (Vflag) std::cout << "Object Type: ";
+			std::cout << my_object_type_string(pld->object_type);
+			if (Vflag) std::cout << "\nunique ID: ";
+			else std::cout << '\t';
 			if (pld->unique_identifier) {
-				printf ("%.*s", (int)pld->unique_identifier->size,
-					pld->unique_identifier->value);
+				std::cout << std::string(
+					pld->unique_identifier->value,
+					pld->unique_identifier->size);
 			}
-			if (Vflag) printf ("\n");
+			if (Vflag) std::cout << std::endl;
 switch (pld->object_type) {
 case KMIP_OBJTYPE_SYMMETRIC_KEY: {
-		KeyBlock *kp = ((SymmetricKey *)pld->object)->key_block;
+		KeyBlock *kp = static_cast<SymmetricKey *>(pld->object)->key_block;
 		ByteString *bp = 0;
 		int count = 0;
 		int i;
 		ap = 0;
 		if (Vflag) {
-			printf ("key format: %s\n",
-				my_key_format_type_string(kp->key_format_type));
-			printf ("key compression: %s\n",
-				my_key_compression_type_string(kp->key_compression_type));
-			printf ("key algorithm: %s\n",
-				my_cryptographic_algorithm_string(kp->cryptographic_algorithm));
-			printf ("cryptographic length: %d\n",
-				kp->cryptographic_length);
-		} else printf ("\t");
+			std::cout << "key format: " <<
+				my_key_format_type_string(kp->key_format_type)
+				<< std::endl;
+			std::cout << "key compression: " <<
+				my_key_compression_type_string(kp->key_compression_type)
+				<< std::endl;;
+			std::cout << "key algorithm: " <<
+				my_cryptographic_algorithm_string(kp->cryptographic_algorithm)
+				<< std::endl;;
+			std::cout << "cryptographic length: " <<
+				kp->cryptographic_length << std::endl;
+		} else std::cout << '\t';
 		switch (kp->key_value_type) {
 		case KMIP_TYPE_BYTE_STRING:
 			bp = static_cast<ByteString*>(kp->key_value);
@@ -460,71 +465,73 @@ case KMIP_KEYFORMAT_X509: case KMIP_KEYFORMAT_EC_PRIVATE_KEY:
 			bp = static_cast<ByteString*>(kv->key_material);
 			break;
 default:
-printf ("?" "?-unknown-key-material");
+std::cout << "?" "?-unknown-key-material";
 			}
 			ap = kv->attributes;
 			count = kv->attribute_count;
 			} break;
-		default: printf ("??undecipherable key value");
+		default: std::cout << "??undecipherable key value";
 		}
 		if (bp) {
 			for (i = 0; i < bp->size; ++i)
-				printf ("%02x", i[bp->value]);
+				std::cout << std::hex <<
+					std::setfill ('0') << std::setw(2)
+					<< static_cast<unsigned int>(i[bp->value]);
 		}
-		if (Vflag) printf ("\nAttributes :\n");
-		else printf ("\t");
+		if (Vflag) std::cout << std::endl << "Attributes :" << std::endl;
+		else std::cout << '\t';
 		if (ap) for (i = 0; i < count; ++i) {
-		} else printf (Vflag ? "None" : "-");
-		printf ("\n");
+		} else std::cout << (Vflag ? "None" : "-");
+		std::cout << std::endl;
 	} break;
 default:
-	printf("Unknown object at %p\n", (long int) (pld->object));
+	std::cout << "Unknown object at " << pld->object << std::endl;
 }
 		}
 		} break;
 	case OP_LISTATTRS: {
-		GetAttributeListResponsePayload *pld = (GetAttributeListResponsePayload *)req->response_payload;
+		GetAttributeListResponsePayload *pld = static_cast<GetAttributeListResponsePayload *>(req->response_payload);
 		if (pld) {
 			const char *sep = "";
-			if (Vflag) printf ("Attribute names: %d\n",
-				pld->attribute_names_count);
+			if (Vflag) std::cout << "Attribute names: "
+				<< pld->attribute_names_count << std::endl;
 			for (i = 0; i < pld->attribute_names_count; ++i) {
-				printf ("%s%s", sep,
-					my_attribute_type_string(pld->attribute_names[i]));
+				std::cout << sep <<
+					my_attribute_type_string(pld->attribute_names[i]);
 				sep = ", ";
 			}
-			printf ("\n");
+			std::cout << std::endl;
 		}
 		} break;
 	case OP_GETATTRS: {
-		GetAttributesResponsePayload *pld = (GetAttributesResponsePayload *)req->response_payload;
+		GetAttributesResponsePayload *pld = static_cast<GetAttributesResponsePayload *>(req->response_payload);
 		if (pld) {
 			const char *sep = "";
-			if (Vflag) printf ("Attributes: %d\n",
-				pld->attribute_count);
+			if (Vflag) std::cout << "Attributes: " <<
+				pld->attribute_count << std::endl;
 			for (i = 0; i < pld->attribute_count; ++i) {
 				char vtemp[512];
 				my_attribute_value_string(vtemp, sizeof vtemp,
 					pld->attributes[i].type,
 					pld->attributes[i].value);
-				printf ("%s%s=%s",
-					sep,
-					my_attribute_type_string(pld->attributes[i].type),
-					vtemp);
+				std::cout << sep <<
+					my_attribute_type_string(pld->attributes[i].type) <<
+					'=' << vtemp;
 				sep = ", ";
 			}
-			printf ("\n");
+			std::cout << std::endl;
 		}
 		} break;
 	case OP_DESTROY: {
-		DestroyResponsePayload *pld = (DestroyResponsePayload *)req->response_payload;
+		DestroyResponsePayload *pld = static_cast<DestroyResponsePayload *>(req->response_payload);
 		if (pld) {
-			if (Vflag) printf ("\nunique ID: ");
+			if (Vflag) std::cout << std::endl << "unique ID: ";
 			if (pld->unique_identifier) {
-				printf ("%.*s", (int)pld->unique_identifier->size,
-					pld->unique_identifier->value);
+				std::cout << std::string(
+					pld->unique_identifier->value,
+					pld->unique_identifier->size);
 			}
-			printf ("\n");
+			std::cout << std::endl;
 		}
 		} break;
 	default:
@@ -573,7 +580,7 @@ int set_protocol_version(char *ap)
 	}
 	auto protiter = protos.find(ap);
 	if (protiter == protos.end()) {
-		std::cerr << "Don't understand protocol <" << ap << ">" << std::endl;
+		std::cerr << "Don't understand protocol <" << ap << '>' << std::endl;
 		return 0;
 	}
 	protocol_version = protiter->second;
