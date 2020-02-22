@@ -1,5 +1,6 @@
 kmip1
 kmip2
+kmip4
 *.pem
 *-
 *.o
