@@ -3,7 +3,7 @@ I=-I $H/include
 L=-L$H/lib -lkmip -lssl -lcrypto
 X=-Wl,-rpath,$H/lib
 CFLAGS=$I -g
-CXXFLAGS=$I -g
+CXXFLAGS=$I -g -std=c++11
 all: kmip1 kmip2 kmip4
 kmip1: kmip1.o
 	$(CC) $(CFLAGS) $X -o kmip1 kmip1.o $L
