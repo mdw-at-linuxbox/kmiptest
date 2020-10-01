@@ -21,6 +21,7 @@ extern "C" {
 #include "kmip4lib.h"
 
 int Vflag;
+int iflag;
 char *cacert;
 char *host = 0;
 char *clientcert = 0, *clientkey = 0;
@@ -114,6 +115,8 @@ int process(int op)
 		r = 1;
 		goto Done;
 	}
+	if (!iflag)
+		SSL_CTX_set_verify(kconn->ctx, SSL_VERIFY_PEER, NULL);
 	kconn->bio = BIO_new_ssl_connect(kconn->ctx);
 	if (!kconn->bio) {
 		std::cerr << "BIO_new_ssl_connect failed" << std::endl;
@@ -612,6 +615,9 @@ int main(int ac, char **av)
 //		++vflag;
 //		break;
 	case '-':
+		break;
+	case 'i':
+		++iflag;
 		break;
 	case 'h':
 		if (ac < 1) {
