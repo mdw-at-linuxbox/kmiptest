@@ -187,9 +187,9 @@ Done:
 	return r;
 }
 
-int process(int op)
+int make_request(int op, struct my_kmip_connection *kconn,
+	int (*handle_response)(void *,int,enum result_status,void *), void *arg)
 {
-	struct my_kmip_connection kconn[1];
 	int need_to_free_response = 0;
 	size_t ns;
 	int i, r;
@@ -197,9 +197,6 @@ int process(int op)
 	int response_size = 0;
 
 	char *what = "unknown";
-
-	r = setup_kmip_connectino(kconn);
-	if (r) goto Done;
 	
 	// build the request message
 
@@ -388,7 +385,7 @@ printf ("Adding credential\n");
 		kconn->kmip_ctx->index - kconn->kmip_ctx->buffer,
 		&response, &response_size);
 	if (i < 0) {
-		fprintf(stderr,"Problem sending request to create symmetric key: %d (", i);
+		fprintf(stderr,"Problem sending request to %s symmetric key: %d (", what, i);
 		fprintf(stderr,"%s", my_decode_error_string(i));
 		fprintf(stderr,")\n");
 		fprintf(stderr,"Context error: %s\n",
@@ -424,49 +421,66 @@ printf ("Adding credential\n");
 		kmip_print_response_message(resp_m);
 	ResponseBatchItem *req = resp_m->batch_items;
 	enum result_status rs = req->result_status;
-	printf ("result: %d (", rs);
+	r = (*handle_response)(arg, op, rs, req->response_payload);
+Done:
+	if (need_to_free_response)
+		kmip_free_response_message(kconn->kmip_ctx, resp_m);
+	if (response) {
+		kmip_free_buffer(kconn->kmip_ctx, response, response_size);
+	}
+	return r;
+}
+
+int handle_response(void *arg, int op, enum result_status rs,
+	void *resp)
+{
+	int i, r;
+	Attribute *ap;
+	FILE *out = arg;
+
+	fprintf (out, "result: %d (", rs);
 	fprintf(stdout,"%s", my_decode_result_status_enum(rs));
-	printf (")\n");
+	fprintf (out, ")\n");
 	if (rs != KMIP_STATUS_SUCCESS)
 		;
 	switch(op) {
 	case OP_CREATE: {
-		CreateResponsePayload *pld = (CreateResponsePayload *)req->response_payload;
+		CreateResponsePayload *pld = (CreateResponsePayload *)resp;
 		if (pld) {
-			if (Vflag) printf ("unique ID: ");
+			if (Vflag) fprintf (out, "unique ID: ");
 			if (pld->unique_identifier) {
-				printf ("%.*s", (int)pld->unique_identifier->size,
+				fprintf (out, "%.*s", (int)pld->unique_identifier->size,
 					pld->unique_identifier->value);
 			}
-			printf ("\n");
+			fprintf (out, "\n");
 		}
 		} break;
 	case OP_LOCATE: {
-		LocateResponsePayload *pld = (LocateResponsePayload *)req->response_payload;
+		LocateResponsePayload *pld = (LocateResponsePayload *)resp;
 		if (pld) {
 			char *sep = "";
-			if (Vflag) printf ("located items %d\n", pld->located_items);
-			if (Vflag) printf ("Unique Identifiers: %d\n",
+			if (Vflag) fprintf (out, "located items %d\n", pld->located_items);
+			if (Vflag) fprintf (out, "Unique Identifiers: %d\n",
 				pld->unique_identifiers_count);
 			for (i = 0; i < pld->unique_identifiers_count; ++i) {
-				printf ("%s%s", sep, pld->unique_identifiers[i]);
+				fprintf (out, "%s%s", sep, pld->unique_identifiers[i]);
 				sep = " ";
 			}
-			printf ("\n");
+			fprintf (out, "\n");
 		}
 		} break;
 	case OP_GET: {
-		GetResponsePayload *pld = (GetResponsePayload *)req->response_payload;
+		GetResponsePayload *pld = (GetResponsePayload *)resp;
 		if (pld) {
-			if (Vflag) printf ("Object Type: ");
-			printf ("%s", my_object_type_string(pld->object_type));
-			if (Vflag) printf ("\nunique ID: ");
-			else printf ("\t");
+			if (Vflag) fprintf (out, "Object Type: ");
+			fprintf (out, "%s", my_object_type_string(pld->object_type));
+			if (Vflag) fprintf (out, "\nunique ID: ");
+			else fprintf (out, "\t");
 			if (pld->unique_identifier) {
-				printf ("%.*s", (int)pld->unique_identifier->size,
+				fprintf (out, "%.*s", (int)pld->unique_identifier->size,
 					pld->unique_identifier->value);
 			}
-			if (Vflag) printf ("\n");
+			if (Vflag) fprintf (out, "\n");
 switch (pld->object_type) {
 case KMIP_OBJTYPE_SYMMETRIC_KEY: {
 		KeyBlock *kp = ((SymmetricKey *)pld->object)->key_block;
@@ -475,15 +489,15 @@ case KMIP_OBJTYPE_SYMMETRIC_KEY: {
 		int i;
 		ap = 0;
 		if (Vflag) {
-			printf ("key format: %s\n",
+			fprintf (out, "key format: %s\n",
 				my_key_format_type_string(kp->key_format_type));
-			printf ("key compression: %s\n",
+			fprintf (out, "key compression: %s\n",
 				my_key_compression_type_string(kp->key_compression_type));
-			printf ("key algorithm: %s\n",
+			fprintf (out, "key algorithm: %s\n",
 				my_cryptographic_algorithm_string(kp->cryptographic_algorithm));
-			printf ("cryptographic length: %d\n",
+			fprintf (out, "cryptographic length: %d\n",
 				kp->cryptographic_length);
-		} else printf ("\t");
+		} else fprintf (out, "\t");
 		switch (kp->key_value_type) {
 		case KMIP_TYPE_BYTE_STRING:
 			bp = kp->key_value;
@@ -497,85 +511,96 @@ case KMIP_KEYFORMAT_X509: case KMIP_KEYFORMAT_EC_PRIVATE_KEY:
 			bp = kv->key_material;
 			break;
 default:
-printf ("?" "?-unknown-key-material");
+fprintf (out, "?" "?-unknown-key-material");
 			}
 			ap = kv->attributes;
 			count = kv->attribute_count;
 			} break;
-		default: printf ("??undecipherable key value");
+		default: fprintf (out, "??undecipherable key value");
 		}
 		if (bp) {
 			for (i = 0; i < bp->size; ++i)
-				printf ("%02x", i[bp->value]);
+				fprintf (out, "%02x", i[bp->value]);
 		}
-		if (Vflag) printf ("\nAttributes :\n");
-		else printf ("\t");
+		if (Vflag) fprintf (out, "\nAttributes :\n");
+		else fprintf (out, "\t");
 		if (ap) for (i = 0; i < count; ++i) {
-		} else printf (Vflag ? "None" : "-");
-		printf ("\n");
+		} else fprintf (out, Vflag ? "None" : "-");
+		fprintf (out, "\n");
 	} break;
 default:
-	printf("Unknown object at %p\n", (long int) (pld->object));
+	fprintf(out, "Unknown object at %p\n", (long int) (pld->object));
 }
 		}
 		} break;
 	case OP_LISTATTRS: {
-		GetAttributeListResponsePayload *pld = (GetAttributeListResponsePayload *)req->response_payload;
+		GetAttributeListResponsePayload *pld = (GetAttributeListResponsePayload *)resp;
 		if (pld) {
 			char *sep = "";
-			if (Vflag) printf ("Attribute names: %d\n",
+			if (Vflag) fprintf (out, "Attribute names: %d\n",
 				pld->attribute_names_count);
 			for (i = 0; i < pld->attribute_names_count; ++i) {
-				printf ("%s%s", sep,
+				fprintf (out, "%s%s", sep,
 					my_attribute_type_string(pld->attribute_names[i]));
 				sep = ", ";
 			}
-			printf ("\n");
+			fprintf (out, "\n");
 		}
 		} break;
 	case OP_GETATTRS: {
-		GetAttributesResponsePayload *pld = (GetAttributesResponsePayload *)req->response_payload;
+		GetAttributesResponsePayload *pld = (GetAttributesResponsePayload *)resp;
 		if (pld) {
 			char *sep = "";
-			if (Vflag) printf ("Attributes: %d\n",
+			if (Vflag) fprintf (out, "Attributes: %d\n",
 				pld->attribute_count);
 			for (i = 0; i < pld->attribute_count; ++i) {
 				char vtemp[512];
 				my_attribute_value_string(vtemp, sizeof vtemp,
 					pld->attributes[i].type,
 					pld->attributes[i].value);
-				printf ("%s%s=%s",
+				fprintf (out, "%s%s=%s",
 					sep,
 					my_attribute_type_string(pld->attributes[i].type),
 					vtemp);
 				sep = ", ";
 			}
-			printf ("\n");
+			fprintf (out, "\n");
 		}
 		} break;
 	case OP_DESTROY: {
-		DestroyResponsePayload *pld = (DestroyResponsePayload *)req->response_payload;
+		DestroyResponsePayload *pld = (DestroyResponsePayload *)resp;
 		if (pld) {
-			if (Vflag) printf ("\nunique ID: ");
+			if (Vflag) fprintf (out, "\nunique ID: ");
 			if (pld->unique_identifier) {
-				printf ("%.*s", (int)pld->unique_identifier->size,
+				fprintf (out, "%.*s", (int)pld->unique_identifier->size,
 					pld->unique_identifier->value);
 			}
-			printf ("\n");
+			fprintf (out, "\n");
 		}
 		} break;
 	default:
 		fprintf(stderr,"oops, missing operation response implementation\n");
 	}
 	r = 0;
+	return r;
+}
+
+int process(int op)
+{
+	struct my_kmip_connection kconn[1];
+	int need_to_free_response = 0;
+	size_t ns;
+	int i, r;
+	char *response = NULL;
+	int response_size = 0;
+
+	char *what = "unknown";
+
+	r = setup_kmip_connectino(kconn);
+	if (r) goto Done;
+	
+	r = make_request(op, kconn, handle_response, stdout);
 Done:
-	if (need_to_free_response)
-		kmip_free_response_message(kconn->kmip_ctx, resp_m);
-	int set_null_buffer = 0;
-	if (response) {
-		kmip_free_buffer(kconn->kmip_ctx, response, response_size);
-		set_null_buffer = 1;
-	}
 	kmip_free_handle_stuff(kconn);
 	return r;
 }
