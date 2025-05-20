@@ -149,6 +149,7 @@ const char *my_attribute_type_string(enum attribute_type value)
 		return "?";
 	}
 }
+
 char *my_cryptographic_usage_mask_string(char *s, int n, int32 v)
 {
 	int kl;
