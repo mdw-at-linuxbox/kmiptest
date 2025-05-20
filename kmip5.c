@@ -16,6 +16,7 @@
 #endif
 
 int Vflag;
+int iflag;
 char *cacert;
 char *host = 0;
 char *clientcert = 0, *clientkey = 0;
@@ -118,6 +119,9 @@ int setup_kmip_connectino(struct my_kmip_connection *kconn)
 		ERR_print_errors_fp(stderr);
 		r = 1;
 		goto Done;
+	}
+	if (!iflag) {
+		SSL_CTX_set_verify(kconn->ctx, SSL_VERIFY_PEER, NULL);
 	}
 	kconn->bio = BIO_new_ssl_connect(kconn->ctx);
 	if (!kconn->bio) {
@@ -658,6 +662,9 @@ int main(int ac, char **av)
 //		++vflag;
 //		break;
 	case '-':
+		break;
+	case 'i':
+		++iflag;
 		break;
 	case 'h':
 		if (ac < 1) {
