@@ -403,6 +403,7 @@ printf ("Adding credential\n");
 		kmip_free_buffer(kconn->kmip_ctx,
 			kconn->encoding,
 			kconn->buffer_total_size);
+		kmip_set_buffer(kconn->kmip_ctx, NULL, 0);
 		kconn->encoding = 0;
 	}
 	kmip_set_buffer(kconn->kmip_ctx, response, response_size);
@@ -431,6 +432,8 @@ Done:
 		kmip_free_response_message(kconn->kmip_ctx, resp_m);
 	if (response) {
 		kmip_free_buffer(kconn->kmip_ctx, response, response_size);
+		kmip_set_buffer(kconn->kmip_ctx, NULL, 0);
+		kconn->encoding = 0;
 	}
 	return r;
 }
